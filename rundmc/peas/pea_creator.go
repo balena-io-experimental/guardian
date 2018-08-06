@@ -112,7 +112,7 @@ func (p *PeaCreator) CreatePea(log lager.Logger, processSpec garden.ProcessSpec,
 		NetworkSharedContainerName: sandboxHandle,
 	}
 
-	cgroupPath := sandboxHandle
+	cgroupPath := ""
 	limits := garden.Limits{}
 	if processSpec.OverrideContainerLimits != nil {
 		cgroupPath = processID

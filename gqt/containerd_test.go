@@ -16,7 +16,7 @@ import (
 	"github.com/onsi/gomega/gexec"
 )
 
-var _ = Describe("Containerd", func() {
+var _ = FDescribe("Containerd", func() {
 	var (
 		client *runner.RunningGarden
 	)
@@ -257,14 +257,14 @@ var _ = Describe("Containerd", func() {
 				})
 			})
 
-			Describe("creating a pea", func() {
-				It("creates a containerd container with running init task", func() {
-					_, err := container.Run(garden.ProcessSpec{
+			Describe("pea", func() {
+				It("creates a containerd container with a running task", func() {
+					process, err := container.Run(garden.ProcessSpec{
 						ID:    "ctrd-pea-id",
 						Image: garden.ImageRef{URI: createPeaRootfsTar()},
 						Path:  "/bin/sleep",
 						Args:  []string{"10"},
-						User:  "alice",
+						// User:  "alice",
 					}, garden.ProcessIO{})
 					Expect(err).NotTo(HaveOccurred())
 
@@ -278,6 +278,36 @@ var _ = Describe("Containerd", func() {
 					cmdline, err := ioutil.ReadFile(filepath.Join("/", "proc", peaProcessPid, "cmdline"))
 					Expect(err).NotTo(HaveOccurred())
 					Expect(string(cmdline)).To(ContainSubstring("/bin/sleep"))
+
+					code, err := process.Wait()
+					Expect(err).NotTo(HaveOccurred())
+					Expect(code).To(Equal(0))
+				})
+
+				FIt("cleans up pea-debris", func() {
+					process, err := container.Run(garden.ProcessSpec{
+						ID:    "ctrd-pea-id-2",
+						Image: garden.ImageRef{URI: createPeaRootfsTar()},
+						Path:  "/bin/echo",
+						Args:  []string{"pee-poo"},
+						User:  "alice",
+					}, garden.ProcessIO{})
+					Expect(err).NotTo(HaveOccurred())
+
+					code, err := process.Wait()
+					Expect(err).NotTo(HaveOccurred())
+					Expect(code).To(Equal(0))
+
+					tasks := listTasks("ctr", config.ContainerdSocket)
+					Expect(tasks).NotTo(ContainSubstring("ctrd-pea-id-2"))
+
+					Expect(tasks).To(ContainSubstring(container.Handle()))
+					// fmt.Println(">>>>>>>>>>>>>>>>>>>>>>>>>>>", tasks)
+					// time.Sleep(time.Hour)
+					// Fail("ahhhhhh")
+
+					containers := listContainers("ctr", config.ContainerdSocket)
+					Expect(containers).NotTo(ContainSubstring("ctrd-pea-id-2"))
 				})
 			})
 		})
@@ -286,6 +316,10 @@ var _ = Describe("Containerd", func() {
 
 func listContainers(ctr, socket string) string {
 	return runCtr(ctr, socket, []string{"containers", "list"})
+}
+
+func listTasks(ctr, socket string) string {
+	return runCtr(ctr, socket, []string{"tasks", "list"})
 }
 
 func listProcesses(ctr, socket, containerID string) string {

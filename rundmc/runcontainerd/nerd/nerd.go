@@ -11,6 +11,7 @@ import (
 	"code.cloudfoundry.org/lager"
 	"github.com/containerd/containerd"
 	"github.com/containerd/containerd/cio"
+	"github.com/containerd/containerd/errdefs"
 	"github.com/containerd/containerd/linux/runctypes"
 	specs "github.com/opencontainers/runtime-spec/specs-go"
 )
@@ -57,13 +58,34 @@ func (n *Nerd) Delete(log lager.Logger, containerID string) error {
 	}
 
 	log.Debug("deleting-task", lager.Data{"containerID": containerID})
-	_, err = task.Delete(n.context, containerd.WithProcessKill)
+	_, err = task.Delete(n.context, withProcessKill)
 	if err != nil {
 		return err
 	}
 
 	log.Debug("deleting-container", lager.Data{"containerID": containerID})
 	return container.Delete(n.context)
+}
+
+// WithProcessKill will forcefully kill and delete a process
+func withProcessKill(ctx context.Context, p containerd.Process) error {
+	ctx, cancel := context.WithCancel(ctx)
+	defer cancel()
+	// ignore errors to wait and kill as we are forcefully killing
+	// the process and don't care about the exit status
+	s, err := p.Wait(ctx)
+	if err != nil {
+		return err
+	}
+	if err := p.Kill(ctx, syscall.SIGKILL); err != nil {
+		if errdefs.IsFailedPrecondition(err) || errdefs.IsNotFound(err) {
+			return nil
+		}
+		return err
+	}
+	// wait for the process to fully stop before letting the rest of the deletion complete
+	<-s
+	return nil
 }
 
 func (n *Nerd) State(log lager.Logger, containerID string) (int, string, error) {
